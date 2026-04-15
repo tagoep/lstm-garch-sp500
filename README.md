@@ -157,6 +157,69 @@ The simple equal-weight hybrid (average of LSTM and GARCH) sits between the two 
 
 ---
 
+## Visualisations
+
+### SPY Price and Log Returns (1993–2024)
+![SPY Price and Returns](outputs/01_spy_price_returns.png)
+
+---
+
+### Return Distribution and Statistical Properties
+![Return Statistics](outputs/02_return_statistics.png)
+
+*Top left: actual return distribution vs normal curve — fat tails clearly visible. Top right: Q-Q plot showing the S-curve signature of heavy tails. Bottom left: ACF of returns — little autocorrelation, direction hard to predict. Bottom right: ACF of squared returns — strong persistence confirming ARCH effects and justifying GARCH.*
+
+---
+
+### Rolling Annualised Volatility
+![Rolling Volatility](outputs/03_rolling_volatility.png)
+
+*21-day rolling annualised volatility with major crisis periods shaded. Mean volatility of 15.9% across the full period. The 2008 financial crisis and COVID-19 crash are the two dominant volatility spikes.*
+
+---
+
+### GARCH(1,1) Conditional Volatility
+![GARCH Volatility](outputs/04_garch_volatility.png)
+
+*Top: GARCH ±2σ volatility bands around actual returns — bands widen dramatically during crises. Middle: annualised conditional volatility peaking at 103% on March 17, 2020. Bottom: standardised residuals — mostly within ±3σ with extreme values corresponding to crisis events.*
+
+---
+
+### GARCH Residual Diagnostics
+![GARCH Diagnostics](outputs/05_garch_residual_diagnostics.png)
+
+*Both ACF plots are nearly flat — no remaining autocorrelation in standardised residuals or squared residuals. GARCH successfully removed all volatility clustering. The remaining signal is what the LSTM learns to capture.*
+
+---
+
+### LSTM Training History
+![LSTM Training](outputs/06_lstm_training.png)
+
+*Left: training and validation loss converge cleanly at epoch 16 — no overfitting. Right: predicted vs actual volatility scatter — tight clustering around the perfect forecast line across the full volatility range.*
+
+---
+
+### LSTM Volatility Forecast vs Actual — Test Period
+![LSTM Forecast](outputs/07_lstm_forecast.png)
+
+*LSTM forecast (red) tracks actual GARCH conditional volatility (blue) closely across the full 2018–2024 test period including the COVID spike to 103% annualised volatility in March 2020.*
+
+---
+
+### Three-Model Comparison
+![Model Comparison](outputs/08_model_comparison.png)
+
+*Top: all three models over the full test period — lines nearly overlapping. Middle: COVID crisis zoom showing how each model handled the March 2020 spike — LSTM and hybrid track the recovery more precisely than GARCH. Bottom: bar chart of annualised RMSE and MAE — LSTM beats GARCH by 26% on RMSE.*
+
+---
+
+### Forecast Error Distributions
+![Error Distributions](outputs/09_error_distributions.png)
+
+*All three error distributions are centered near zero — no systematic bias. LSTM (centre) has the narrowest, most concentrated distribution. GARCH (left) has slightly heavier right tails — it occasionally underestimates volatility more severely than LSTM, a critical failure mode for insurance and risk management applications.*
+
+---
+
 ## Output Files
 
 | File | Description |
