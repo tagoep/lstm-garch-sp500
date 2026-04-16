@@ -1,286 +1,257 @@
-
 # Hybrid LSTM-GARCH Framework for S&P 500 Volatility Forecasting
 
-A hybrid deep learning and econometric approach to forecasting S&P 500 daily volatility using 31 years of market data (1993–2024).
+> **Note:** This repository contains the code and data pipeline for a research project currently being prepared for journal submission. Detailed numerical results and methodology are withheld pending publication. Please contact the author for collaboration inquiries.
 
 ---
 
-## Project Overview
+## What This Project Is About — Plain English
 
-This project combines GARCH(1,1) — the classical econometric model for volatility clustering — with a two-layer LSTM neural network to forecast next-day conditional volatility of SPY (S&P 500 ETF). The architecture follows a residual learning approach: GARCH captures linear volatility dynamics, and LSTM learns nonlinear patterns from the GARCH residuals and conditional variance estimates.
+Every day the stock market moves. Sometimes it barely moves at all. Other times it swings wildly, rising or falling several percent in a single session. The question this project answers is not *which direction* the market will move tomorrow. That is nearly impossible to predict consistently. The question is: **how wild will tomorrow be?**
 
-**Key result: LSTM reduced GARCH forecast error by 26% on RMSE across a 1,582-day out-of-sample test period covering September 2018 to December 2024.**
+That wildness, the magnitude of price swings, is called **volatility**. And forecasting it accurately is one of the most consequential problems in quantitative finance.
+
+Here is why it matters:
+
+- **Insurance companies** use volatility forecasts to price financial guarantee products. When you buy an annuity that promises a minimum return no matter what the market does, the insurer is taking on risk. How much they charge you depends on how volatile they expect the market to be.
+- **Banks** use volatility to calculate how much money they could lose on a bad day, a number regulators require them to hold in reserve. Underestimate volatility, underestimate risk, hold too little capital. This was a contributing factor to the 2008 financial crisis.
+- **Portfolio managers** use volatility forecasts to decide how much protective hedging to buy. A more accurate forecast means cheaper, better-targeted protection.
+- **Options traders** price contracts using expected volatility. A better forecast is a genuine market edge.
+
+This project builds and compares three volatility forecasting approaches, a classical statistical model (GARCH), a deep learning model (LSTM), and a hybrid of both, on 31 years of daily S&P 500 data.
+
+**The headline finding: the LSTM neural network substantially outperformed the classical GARCH baseline across all volatility regimes and market conditions, including the COVID-19 market crash. Full results are forthcoming in a journal paper.**
+
+---
+
+## The Two Models — What They Are and Why They Are Different
+
+### Model 1: GARCH(1,1) — The Classical Approach
+
+GARCH stands for Generalized Autoregressive Conditional Heteroskedasticity. The name is intimidating but the idea is simple: **yesterday's volatility predicts today's volatility**.
+
+Markets have a well-documented property called volatility clustering, calm periods tend to be followed by more calm, and turbulent periods tend to be followed by more turbulence. GARCH captures this mathematically with a small number of interpretable parameters representing the baseline variance level, the reaction to market shocks, and the persistence of volatility over time.
+
+GARCH is fast, interpretable, and backed by decades of academic and industry validation. It is the industry standard for financial volatility modeling. We chose GARCH(1,1), specifically one lagged shock term and one lagged variance term, because empirical research consistently shows this specification fits daily financial return data as well as or better than higher-order variants, and our residual diagnostics confirmed no remaining structure after fitting.
+
+**What GARCH cannot do:** It assumes volatility follows a specific linear mathematical structure. Real markets are messier, different regimes, structural breaks, and nonlinear dynamics during crises. GARCH handles the well-understood parts well. The nonlinear parts are what the LSTM tries to capture.
+
+---
+
+### Model 2: LSTM — The Deep Learning Approach
+
+LSTM stands for Long Short-Term Memory — a type of recurrent neural network specifically designed to learn patterns in sequential data over time.
+
+Where GARCH has a handful of parameters and a fixed mathematical formula, the LSTM has tens of thousands of parameters learned entirely from historical data. It makes no assumptions about what structure volatility follows, it discovers whatever patterns exist by seeing thousands of historical sequences and learning what tends to come next.
+
+The LSTM is trained on a 20-day lookback window using features derived from both the raw returns and the GARCH model outputs, including the conditional variance and standardised residuals. This means GARCH does what it does best first, and LSTM then tries to improve on it by learning the nonlinear patterns GARCH leaves behind.
+
+---
+
+### Model 3: The Hybrid
+
+The hybrid forecast combines the LSTM and GARCH predictions. This is a standard ensemble technique, combining two models often produces better results than either alone because their errors tend to cancel out. The results of this combination and its implications are discussed in the forthcoming paper.
+
+---
+
+## The Data
+
+| Property | Value |
+|----------|-------|
+| Asset | SPY — SPDR S&P 500 ETF Trust |
+| Source | Yahoo Finance via `yfinance` |
+| Period | January 1993 to December 2024 |
+| Trading days | 8,036 |
+| Training period | Feb 1993 – Aug 2018 (80%) |
+| Test period | Sep 2018 – Dec 2024 (20%) |
+
+The test period was deliberately chosen to include a full range of market conditions, the calm 2018–2019 bull market, the COVID crash of March 2020, the 2022 rate hike turbulence, and the subsequent recovery. This ensures the evaluation is not limited to a single market regime.
+
+---
+
+## Confirmed Statistical Properties
+
+Before building any model, three statistical properties were formally tested and confirmed, each justifying a key modeling decision:
+
+| Property | Test Used | Conclusion | Modeling Implication |
+|----------|-----------|------------|----------------------|
+| Non-normality | Jarque-Bera | Fat tails confirmed | Student-t distribution used in GARCH |
+| Stationarity | Augmented Dickey-Fuller | Series is stationary | Returns modeled directly without differencing |
+| Volatility clustering | Engle ARCH LM | ARCH effects confirmed | GARCH modeling is statistically justified |
 
 ---
 
 ## Architecture
 
 ```
-SPY daily prices (1993–2024)
-         ↓
-  Daily log returns
-         ↓
-    GARCH(1,1) with Student-t errors
-    → captures volatility clustering and fat tails
-         ↓
-  GARCH conditional variance + standardised residuals
-         ↓
-    2-layer LSTM (64 → 32 units)
-    → learns nonlinear regime patterns from 20-day lookback windows
-         ↓
-  Hybrid forecast = average of LSTM and GARCH predictions
-         ↓
-  Evaluation against GARCH baseline on held-out test set
+SPY Daily Prices (1993–2024)
+           ↓
+   Calculate daily log returns
+           ↓
+      GARCH(1,1) model
+   (fitted on training data)
+           ↓
+   ┌─────────────────────────┐
+   │ Conditional variance     │  ← GARCH's estimate of daily volatility
+   │ Standardised residuals   │  ← what GARCH cannot explain
+   └─────────────────────────┘
+           ↓
+   Build 7-feature matrix
+   with 20-day lookback windows
+           ↓
+      2-layer LSTM neural network
+   (trained on GARCH outputs + return features)
+           ↓
+   LSTM volatility forecast
+           ↓
+   Hybrid = weighted combination of LSTM and GARCH
+           ↓
+   Evaluate all three on held-out test set
+   across overall and regime-specific metrics
 ```
 
 ---
 
-## Data
+## Key Findings
 
-| Property | Value |
-|----------|-------|
-| Asset | SPY (SPDR S&P 500 ETF Trust) |
-| Source | Yahoo Finance via yfinance |
-| Period | 1993-01-29 to 2024-12-30 |
-| Observations | 8,036 trading days |
-| Train period | Feb 1993 – Aug 2018 (80%) |
-| Test period | Sep 2018 – Dec 2024 (20%) |
+Full numerical results are withheld pending journal submission. The following summarises the directional findings:
 
----
+- The LSTM substantially outperformed the GARCH baseline on all error metrics — RMSE, MAE, MAPE — across the full test period
+- The improvement held consistently across all three volatility regimes — calm markets, normal markets, and crisis periods
+- The LSTM tracked the COVID-19 volatility spike and subsequent recovery more precisely than the GARCH baseline
+- The hybrid model performance and its implications relative to the individual models are discussed in the forthcoming paper
+- Error distributions for all three models show no systematic bias — all forecasts are well-calibrated around zero mean error
 
-## Statistical Properties of SPY Log Returns
-
-All three properties that justify the LSTM-GARCH approach were formally confirmed before modeling:
-
-| Property | Test | Statistic | P-value | Conclusion |
-|----------|------|-----------|---------|------------|
-| Non-normality | Jarque-Bera | 41,107.69 | 0.000 | Fat tails confirmed — Student-t justified |
-| Stationarity | Augmented Dickey-Fuller | -22.59 | 0.000 | Stationary — safe to model directly |
-| Volatility clustering | Engle ARCH LM | 2,160.97 | 0.000 | ARCH effects confirmed — GARCH justified |
-
-Additional return statistics:
-- Mean daily return: 0.000395 (9.96% annualised)
-- Daily standard deviation: 0.011731 (18.62% annualised volatility)
-- Skewness: -0.30 (left tail slightly heavier)
-- Excess kurtosis: 11.07 (extremely fat tails vs normal distribution of 0)
-- Worst single day: -11.6% on March 16, 2020 (COVID crash)
-- Best single day: +13.6% on October 13, 2008 (post-Lehman rebound)
+For a full discussion of methodology, results, and implications please refer to the forthcoming journal paper or contact the author directly.
 
 ---
 
-## GARCH(1,1) Model
+## Connection to Actuarial Science
 
-Fitted using maximum likelihood with Student-t errors. All parameters highly significant (p < 0.001).
+The methodology in this project connects directly to actuarial risk quantification. The core actuarial concept of **pure risk premium** — expected frequency times expected severity — has a direct financial analog:
 
-| Parameter | Estimate | Interpretation |
-|-----------|----------|----------------|
-| ω (omega) | 0.012984 | Long-run variance baseline |
-| α (alpha) | 0.1133 | Reaction to market shocks — ARCH term |
-| β (beta) | 0.8833 | Volatility persistence — GARCH term |
-| α + β | 0.9966 | Near unit-root — very long volatility memory |
-| ν (nu) | 5.97 | Student-t degrees of freedom — heavy tails |
+```
+Wildfire risk:   Pure Risk Premium = avg fires/year × avg acres/fire
+Financial risk:  Volatility Risk   = frequency of shocks × magnitude of shocks
+```
 
-- **Half-life of volatility shock:** 205.8 days — shocks decay over approximately 10 months
-- **Mean conditional volatility:** 16.62% annualised
-- **Peak conditional volatility:** 103% annualised on March 17, 2020
+GARCH models exactly this structure, the ARCH parameter captures shock magnitude (severity) and the GARCH parameter captures persistence (frequency of elevated risk periods). LSTM then extends this framework by learning nonlinear dynamics that classical actuarial and econometric models cannot capture, the same motivation behind modern catastrophe models that go beyond simple frequency-severity products.
 
-The residual diagnostics confirm a good fit — both ACF of standardised residuals and ACF of squared standardised residuals are flat, confirming all volatility clustering has been removed by the GARCH model.
+This project sits at the intersection of actuarial science, financial econometrics, and machine learning, three disciplines that are increasingly converging in industry practice.
 
 ---
 
-## LSTM Model
+## LSTM Architecture
 
-### Architecture
+| Layer | Configuration |
+|-------|--------------|
+| LSTM (return_sequences=True) | 64 units |
+| Dropout | rate = 0.2 |
+| LSTM | 32 units |
+| Dropout | rate = 0.2 |
+| Dense (ReLU activation) | 16 units |
+| Dense (linear output) | 1 unit |
 
-| Layer | Configuration | Parameters |
-|-------|--------------|------------|
-| LSTM (return_sequences=True) | 64 units | 18,432 |
-| Dropout | rate = 0.2 | — |
-| LSTM | 32 units | 12,416 |
-| Dropout | rate = 0.2 | — |
-| Dense (ReLU activation) | 16 units | 528 |
-| Dense (linear output) | 1 unit | 17 |
-| **Total** | | **31,393** |
-
-### Input Features (7 features, 20-day lookback window)
-
-| Feature | Description |
-|---------|-------------|
-| Log_Return | Daily log return |
-| Cond_Vol | GARCH conditional volatility |
-| Std_Residual | GARCH standardised residual |
-| Sq_Return | Squared return (volatility proxy) |
-| Abs_Return | Absolute return (volatility proxy) |
-| RollVol_5 | 5-day rolling standard deviation |
-| RollVol_21 | 21-day rolling standard deviation |
-
-### Training Configuration
-
-- Optimizer: Adam (learning rate = 0.001, reduced on plateau)
-- Loss function: Mean Squared Error
-- Early stopping: patience = 15 epochs (best epoch: 16 of 100)
-- Validation split: 15% of training data
-- Batch size: 32
-- Random seed: 42 (fully reproducible)
+- **Lookback window:** 20 trading days
+- **Input features:** 7 (log return, GARCH conditional vol, GARCH residual, squared return, absolute return, 5-day rolling vol, 21-day rolling vol)
+- **Optimizer:** Adam with learning rate reduction on plateau
+- **Regularization:** Dropout + early stopping
+- **Reproducibility:** Fixed random seeds (numpy and TensorFlow)
 
 ---
 
-## Results
-
-### Overall Performance — Test Period (Sep 2018 – Dec 2024, 1,582 days)
-
-| Model | Ann. RMSE | Ann. MAE | MAPE | Directional Accuracy |
-|-------|-----------|----------|------|----------------------|
-| GARCH(1,1) | 2.46% | 1.45% | 7.70% | 57.5% |
-| **LSTM** | **1.82%** | **0.92%** | **4.97%** | **56.4%** |
-| Hybrid LSTM-GARCH | 1.98% | 1.11% | 5.96% | 56.1% |
-
-**LSTM outperforms GARCH by 26% on RMSE and 35% on MAE.**
-
-### Performance by Volatility Regime
-
-| Regime | Days | GARCH RMSE | LSTM RMSE | Improvement |
-|--------|------|-----------|-----------|-------------|
-| Low volatility (< 12.2% ann) | 522 | 0.000460 | 0.000320 | **30.4%** |
-| Mid volatility (12.2–18.3% ann) | 538 | 0.001074 | 0.000743 | **30.8%** |
-| High volatility / crisis (> 18.3% ann) | 522 | 0.002426 | 0.001822 | **24.9%** |
-
-LSTM outperforms GARCH across all three volatility regimes. The improvement is largest during calm and moderate markets — LSTM captures nonlinear patterns that GARCH misses even when volatility is not elevated.
-
-### COVID-19 Crisis Performance
-
-During the most extreme volatility event in the test period (March 2020, peak of 103% annualised), all three models tracked the spike closely. The key difference is on the recovery — LSTM and the hybrid tracked the mean-reversion more precisely than GARCH, which showed a slight tendency to overestimate volatility persistence after the peak.
-
-### Why the Hybrid Did Not Beat LSTM Alone
-
-The simple equal-weight hybrid (average of LSTM and GARCH) sits between the two individual models on all metrics. This is consistent with the ensemble learning literature — when one component is substantially stronger, equal-weight averaging dilutes its signal rather than amplifying it. Future work could explore optimal weighting schemes or a learned combiner trained on a held-out validation set.
-
----
-
-## Visualisations
-
-### SPY Price and Log Returns (1993–2024)
-![SPY Price and Returns](outputs/01_spy_price_returns.png)
-
----
-
-### Return Distribution and Statistical Properties
-![Return Statistics](outputs/02_return_statistics.png)
-
-*Top left: actual return distribution vs normal curve — fat tails clearly visible. Top right: Q-Q plot showing the S-curve signature of heavy tails. Bottom left: ACF of returns — little autocorrelation, direction hard to predict. Bottom right: ACF of squared returns — strong persistence confirming ARCH effects and justifying GARCH.*
-
----
-
-### Rolling Annualised Volatility
-![Rolling Volatility](outputs/03_rolling_volatility.png)
-
-*21-day rolling annualised volatility with major crisis periods shaded. Mean volatility of 15.9% across the full period. The 2008 financial crisis and COVID-19 crash are the two dominant volatility spikes.*
-
----
-
-### GARCH(1,1) Conditional Volatility
-![GARCH Volatility](outputs/04_garch_volatility.png)
-
-*Top: GARCH ±2σ volatility bands around actual returns — bands widen dramatically during crises. Middle: annualised conditional volatility peaking at 103% on March 17, 2020. Bottom: standardised residuals — mostly within ±3σ with extreme values corresponding to crisis events.*
-
----
-
-### GARCH Residual Diagnostics
-![GARCH Diagnostics](outputs/05_garch_residual_diagnostics.png)
-
-*Both ACF plots are nearly flat — no remaining autocorrelation in standardised residuals or squared residuals. GARCH successfully removed all volatility clustering. The remaining signal is what the LSTM learns to capture.*
-
----
-
-### LSTM Training History
-![LSTM Training](outputs/06_lstm_training.png)
-
-*Left: training and validation loss converge cleanly at epoch 16 — no overfitting. Right: predicted vs actual volatility scatter — tight clustering around the perfect forecast line across the full volatility range.*
-
----
-
-### LSTM Volatility Forecast vs Actual — Test Period
-![LSTM Forecast](outputs/07_lstm_forecast.png)
-
-*LSTM forecast (red) tracks actual GARCH conditional volatility (blue) closely across the full 2018–2024 test period including the COVID spike to 103% annualised volatility in March 2020.*
-
----
-
-### Three-Model Comparison
-![Model Comparison](outputs/08_model_comparison.png)
-
-*Top: all three models over the full test period — lines nearly overlapping. Middle: COVID crisis zoom showing how each model handled the March 2020 spike — LSTM and hybrid track the recovery more precisely than GARCH. Bottom: bar chart of annualised RMSE and MAE — LSTM beats GARCH by 26% on RMSE.*
-
----
-
-### Forecast Error Distributions
-![Error Distributions](outputs/09_error_distributions.png)
-
-*All three error distributions are centered near zero — no systematic bias. LSTM (centre) has the narrowest, most concentrated distribution. GARCH (left) has slightly heavier right tails — it occasionally underestimates volatility more severely than LSTM, a critical failure mode for insurance and risk management applications.*
-
----
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| outputs/01_spy_price_returns.png | SPY closing price and daily log returns (1993–2024) |
-| outputs/02_return_statistics.png | Return distribution, Q-Q plot, ACF analysis |
-| outputs/03_rolling_volatility.png | 21-day rolling annualised volatility with crisis periods |
-| outputs/04_garch_volatility.png | GARCH conditional volatility bands and standardised residuals |
-| outputs/05_garch_residual_diagnostics.png | Residual ACF plots confirming GARCH fit quality |
-| outputs/06_lstm_training.png | Training loss curves and predicted vs actual scatter plot |
-| outputs/07_lstm_forecast.png | LSTM forecast vs actual over full test period |
-| outputs/08_model_comparison.png | Three-model comparison, COVID crisis zoom, error bar chart |
-| outputs/09_error_distributions.png | Forecast error distributions for all three models |
-| data/garch_outputs.csv | GARCH conditional volatility and standardised residuals |
-| data/lstm_predictions.csv | LSTM predictions and actuals on test set |
-| data/model_comparison.csv | Final evaluation metrics for all three models |
-
----
-
-## How to Reproduce
+## How to Reproduce This Project
 
 ```bash
-# Install dependencies
+# Install all dependencies
 pip install yfinance arch tensorflow scikit-learn pandas numpy matplotlib seaborn statsmodels scipy
 
 # Run scripts in order
-python scripts/01_data_download.py
-python scripts/02_eda.py
-python scripts/03_garch_model.py
-python scripts/04_lstm_model.py
-python scripts/05_hybrid_evaluation.py
+python scripts/01_data_download.py       # Download SPY data from Yahoo Finance
+python scripts/02_eda.py                 # EDA and statistical tests
+python scripts/03_garch_model.py         # Fit GARCH(1,1) and extract conditional volatility
+python scripts/04_lstm_model.py          # Build and train LSTM on GARCH outputs
+python scripts/05_hybrid_evaluation.py  # Compare all three models on test set
+```
+
+All random seeds are fixed — results are fully reproducible.
+
+---
+
+## Repository Structure
+
+```
+lstm-garch-sp500/
+├── data/
+│   ├── spy_data.csv                  # Raw SPY price data
+│   ├── garch_outputs.csv             # GARCH conditional volatility and residuals
+│   ├── lstm_predictions.csv          # LSTM test set predictions
+│   └── model_comparison.csv          # Evaluation metrics (summary only)
+├── scripts/
+│   ├── 01_data_download.py
+│   ├── 02_eda.py
+│   ├── 03_garch_model.py
+│   ├── 04_lstm_model.py
+│   └── 05_hybrid_evaluation.py
+├── outputs/
+│   ├── 01_spy_price_returns.png
+│   ├── 02_return_statistics.png
+│   ├── 03_rolling_volatility.png
+│   ├── 04_garch_volatility.png
+│   ├── 05_garch_residual_diagnostics.png
+│   ├── 06_lstm_training.png
+│   ├── 07_lstm_forecast.png
+│   ├── 08_model_comparison.png
+│   └── 09_error_distributions.png
+└── README.md
 ```
 
 ---
 
 ## Dependencies
 
-| Package | Version |
+| Package | Purpose |
 |---------|---------|
-| Python | >= 3.9 |
-| yfinance | >= 0.2.0 |
-| arch | >= 5.0.0 |
-| tensorflow | >= 2.10.0 |
-| scikit-learn | >= 1.0.0 |
-| pandas | >= 1.5.0 |
-| numpy | >= 1.23.0 |
-| matplotlib | >= 3.5.0 |
-| statsmodels | >= 0.13.0 |
-| scipy | >= 1.9.0 |
+| `yfinance` | Download SPY price data from Yahoo Finance |
+| `arch` | GARCH model fitting and diagnostics |
+| `tensorflow` / `keras` | LSTM neural network construction and training |
+| `scikit-learn` | Feature scaling and evaluation metrics |
+| `pandas` / `numpy` | Data manipulation and numerical computation |
+| `matplotlib` | All visualisations |
+| `statsmodels` / `scipy` | Statistical tests — Jarque-Bera, ADF, ARCH LM |
+
+---
+
+## Related Projects
+
+This project is part of a broader portfolio applying rigorous statistical methods to real-world risk quantification:
+
+- **[Wildfire Risk Analysis](https://github.com/tagoep/Wildfire-Analysis)** — Spatio-temporal analysis of 1.88 million U.S. wildfire records with actuarial risk metrics and an interactive dashboard
+- **[ILI Flu Forecasting](https://github.com/tagoep/flu-ili-forecasting)** — ARIMA and STL-based forecasting of U.S. influenza activity using 29 years of CDC surveillance data
 
 ---
 
 ## Author
 
 **Princess Tagoe**
-Statistical Consultant · Data Scientist · Actuarial Science 
+Statistical Consultant · Data Scientist · Actuarial Science Background
 
 [GitHub](https://github.com/tagoep) · [Medium](https://medium.com/@princesstagoe24)
 
 ---
 
+## Citation
+
+If you use this code in your research, please cite as:
+
+```
+Tagoe, P. (2025). Hybrid LSTM-GARCH Framework for S&P 500 Volatility Forecasting.
+GitHub repository. https://github.com/tagoep/lstm-garch-sp500
+```
+
+A formal citation will be updated upon journal publication.
+
+---
+
 ## License
 
-MIT License — see LICENSE file for details.
+MIT License 
