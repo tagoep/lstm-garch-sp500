@@ -244,7 +244,7 @@ Statistical Consultant · Data Scientist · Actuarial Science Background
 If you use this code in your research, please cite as:
 
 ```
-Tagoe, P. (2025). Hybrid LSTM-GARCH Framework for S&P 500 Volatility Forecasting.
+Tagoe, P. (2026). Hybrid LSTM-GARCH Framework for S&P 500 Volatility Forecasting.
 GitHub repository. https://github.com/tagoep/lstm-garch-sp500
 ```
 
